@@ -1,0 +1,42 @@
+# Data (large files)
+data/raw/
+data/*.xlsx
+data/*.csv
+*.XLSX
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Results (keep structure, ignore large outputs)
+results/*.csv
+results/*.parquet
+results/*.png
+results/*.pdf
+!results/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.key
+credentials*
