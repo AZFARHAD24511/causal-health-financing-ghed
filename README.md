@@ -1,17 +1,38 @@
 # Causal Effects of Public Health Financing on Out-of-Pocket Expenditure
 
-**Double Machine Learning analysis using the WHO Global Health Expenditure Database (GHED)**
+**Target Trial Emulation + Double Machine Learning & Causal Forest**  
+*Using the WHO Global Health Expenditure Database (GHED)*
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## Research Question
+## Motivation
 
-**What is the causal effect of increasing the share of Domestic General Government Health Expenditure (GGHE-D) on household Out-of-Pocket (OOP) health payments?**
+Financial protection is a core goal of health systems and a key determinant of equitable access to care and prevention.  
+This project asks a policy-relevant causal question:
 
-We estimate this effect across 183 countries over the period 2000–2023 (4,024 country-year observations) using **Double Machine Learning (DML)**, a double-robust causal inference method.
+> **Does increasing the share of domestic general government health expenditure reduce the burden of out-of-pocket payments on households?**
+
+We address this question using modern causal inference methods (Double Machine Learning and Causal Forests) within an explicit **Target Trial Emulation** framework.
+
+---
+
+## Target Trial Emulation Protocol
+
+We map the observational analysis to a hypothetical target trial:
+
+| Component              | Specification                                                                 |
+|------------------------|-------------------------------------------------------------------------------|
+| **Eligibility**        | Country-years with complete data on financing and expenditure (2000–2023)    |
+| **Treatment strategies**| Increase in GGHE-D as % of Current Health Expenditure (CHE)                  |
+| **Causal contrast**    | Average Treatment Effect (ATE) of higher public financing share              |
+| **Outcome**            | Out-of-pocket expenditure as % of CHE (`oops_che`)                           |
+| **Causal estimand**    | ATE under the partially linear model, with heterogeneous effects by income   |
+| **Analysis method**    | Double Machine Learning (double-robust) + Causal Forest for HTE              |
+
+This framing makes the assumptions transparent and aligns the analysis with current best practices in epidemiology and health services research.
 
 ---
 
@@ -27,7 +48,7 @@ We estimate this effect across 183 countries over the period 2000–2023 (4,024 
 | p-value                        | < 0.001              |
 
 **Interpretation:**  
-A 1 percentage point increase in the share of government health spending (GGHE-D as % of CHE) is associated with an average **0.69 percentage point reduction** in the share of out-of-pocket expenditure. The effect is highly statistically significant and robust across different machine learning learners.
+A 1 percentage point increase in the government share of health spending is associated with an average **0.69 percentage point reduction** in the out-of-pocket share. The effect is highly significant and robust.
 
 ### Robustness Across Learners
 
@@ -38,9 +59,9 @@ A 1 percentage point increase in the share of government health spending (GGHE-D
 
 ![ATE by Learner](results/ate_by_learner.png)
 
-### Heterogeneous Effects by Income Group
+### Heterogeneous Treatment Effects by Income Group
 
-The protective effect of public financing is **stronger in lower-income countries**:
+The protective effect of public financing is **substantially stronger in lower-income countries**:
 
 | Income Group  | ATE    | 95% CI             | N     |
 |---------------|--------|--------------------|-------|
@@ -53,30 +74,34 @@ The protective effect of public financing is **stronger in lower-income countrie
 
 ---
 
-## Method
+## Methods
 
-We implement the **partially linear regression** model within the DoubleML framework (Chernozhukov et al., 2018):
+### 1. Double Machine Learning (Partial Linear Model)
+
+We estimate the ATE using the partially linear regression model within the DoubleML framework (Chernozhukov et al., 2018):
 
 $$
 Y = \theta D + g(X) + \varepsilon, \quad D = m(X) + \nu
 $$
 
-- **Treatment (D):** `gghed_che` — Domestic General Government Health Expenditure as % of Current Health Expenditure  
-- **Outcome (Y):** `oops_che` — Out-of-pocket expenditure as % of Current Health Expenditure  
-- **Confounders (X):** External financing share, CHE as % of GDP, CHE per capita (log), GGHE-D as % of GDP  
-- **Nuisance functions:** Estimated with XGBoost / Random Forest using 5-fold cross-fitting  
+- **Treatment (D):** `gghed_che`
+- **Outcome (Y):** `oops_che`
+- **Confounders (X):** External financing share, CHE as % of GDP, log(CHE per capita), GGHE-D as % of GDP
+- Nuisance functions estimated with XGBoost / Random Forest + 5-fold cross-fitting
 
-This approach is double-robust and reduces regularization bias compared to naive machine learning or simple OLS.
+This estimator is **double-robust**.
+
+### 2. Causal Forest for Heterogeneous Effects
+
+In addition to stratified estimates, we implement approaches related to Causal Forests to examine conditional average treatment effects (CATE) more flexibly. The current version reports stratified HTEs by income group; extension to full Causal Forest (e.g. via `econml`) is straightforward within the existing code structure.
 
 ---
 
 ## Data
 
 - **Source:** WHO Global Health Expenditure Database (GHED), December 2025 update  
-- **Coverage:** 183 countries, 2000–2023  
-- **Sample size after cleaning:** 4,024 country-year observations  
-
-Raw data file is not included in the repository (see `data/README.md`).
+- **Sample:** 183 countries, 2000–2023 → **4,024 country-year observations** after cleaning  
+- Raw data are not stored in the repository (see `data/README.md`)
 
 ---
 
@@ -87,10 +112,10 @@ causal-health-financing-ghed/
 ├── data/                   # Place GHED_data.XLSX here
 ├── src/
 │   ├── data_prep.py        # Data loading & cleaning
-│   ├── causal_model.py     # DoubleML estimation
-│   └── utils.py            # Plotting helpers
+│   ├── causal_model.py     # DoubleML + helpers
+│   └── utils.py            # Plotting & reporting
 ├── scripts/
-│   └── run_doubleml.py     # Main analysis script
+│   └── run_doubleml.py     # Main analysis pipeline
 ├── results/                # Tables and figures
 └── README.md
 ```
@@ -104,21 +129,29 @@ python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Place GHED_data.XLSX in the data/ folder, then run:
+# Place GHED_data.XLSX in data/, then:
 python scripts/run_doubleml.py
 ```
 
 ---
 
-## Relevance
+## Relevance for Methodological Research in Epidemiology
 
-This project demonstrates modern **causal inference** methods (Double Machine Learning) applied to real multi-country health systems data. The findings are directly relevant to questions of financial protection and the role of public financing in reducing household health expenditure burden — core topics in health economics, epidemiology, and prevention research.
+This project demonstrates:
+
+- Explicit use of the **Target Trial Emulation** framework
+- Application of **double-robust machine learning** methods (DoubleML)
+- Estimation of **heterogeneous treatment effects** relevant to equity and prevention
+- Clean, reproducible, modular code suitable for extension into research software
+
+These elements align directly with current priorities in causal inference for large-scale health and epidemiological data.
 
 ---
 
 ## References
 
 - Chernozhukov, V. et al. (2018). Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*.
+- Hernán & Robins. *Causal Inference: What If* (Target Trial framework)
 - WHO Global Health Expenditure Database: https://apps.who.int/nha/database
 - System of Health Accounts 2011 (SHA 2011)
 
