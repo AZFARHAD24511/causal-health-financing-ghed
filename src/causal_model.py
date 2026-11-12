@@ -1,6 +1,10 @@
 """
-Double Machine Learning estimation for the effect of public health financing
-on out-of-pocket expenditure.
+Causal estimation for the effect of public health financing on out-of-pocket expenditure.
+
+Implements:
+- Double Machine Learning (partially linear model)
+- Simple stratified heterogeneity
+- Causal Forest style heterogeneous treatment effects (via econml)
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -9,10 +13,9 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV
-from sklearn.model_selection import KFold
+
 
 try:
-    from doubleml import DoubleMLData, DoubleMLPLR
     from doubleml import DoubleMLData, DoubleMLPLR
 except ImportError:
     raise ImportError(
@@ -76,27 +79,10 @@ def run_doubleml_plr(
     n_folds: int = 5,
     n_rep: int = 1,
     random_state: int = 42,
-) -> Tuple[DoubleMLPLR, Dict]:
+) -> Tuple:
     """
     Estimate the average treatment effect using DoubleML Partially Linear Regression.
-
-    Parameters
-    ----------
-    data : analysis sample
-    treatment : name of treatment column
-    outcome : name of outcome column
-    confounders : list of confounder column names
-    learner_name : which ML model to use for nuisance functions
-    n_folds : number of cross-fitting folds
-    n_rep : number of repetitions (for stability)
-    random_state : seed
-
-    Returns
-    -------
-    dml_model : fitted DoubleMLPLR object
-    summary : dictionary with key results
     """
-    # Prepare DoubleML data object
     dml_data = DoubleMLData(
         data=data,
         y_col=outcome,
@@ -104,11 +90,9 @@ def run_doubleml_plr(
         x_cols=confounders,
     )
 
-    # Learners for outcome and treatment models
-    ml_l = make_learner(learner_name, random_state)   # E[Y|X]
-    ml_m = make_learner(learner_name, random_state)   # E[D|X]
+    ml_l = make_learner(learner_name, random_state)
+    ml_m = make_learner(learner_name, random_state)
 
-    # Partially Linear Regression model
     dml_plr = DoubleMLPLR(
         obj_dml_data=dml_data,
         ml_l=ml_l,
@@ -122,7 +106,6 @@ def run_doubleml_plr(
           f"({n_folds}-fold cross-fitting) ...")
     dml_plr.fit()
 
-    # Extract summary
     coef = dml_plr.coef[0]
     se = dml_plr.se[0]
     pval = dml_plr.pval[0]
@@ -156,9 +139,7 @@ def run_multiple_learners(
     confounders: List[str],
     learners: Optional[List[str]] = None,
 ) -> pd.DataFrame:
-    """
-    Run DoubleML with several different learners for robustness checks.
-    """
+    """Run DoubleML with several different learners for robustness checks."""
     if learners is None:
         learners = ["xgboost", "lightgbm", "rf"]
 
@@ -187,10 +168,7 @@ def heterogeneous_effects_by_group(
     group_var: str = "income",
     learner_name: str = "xgboost",
 ) -> pd.DataFrame:
-    """
-    Estimate ATE separately within groups (e.g. income groups or regions)
-    as a simple form of heterogeneity analysis.
-    """
+    """Estimate ATE separately within groups (simple heterogeneity analysis)."""
     groups = data[group_var].dropna().unique()
     results = []
 
@@ -216,3 +194,62 @@ def heterogeneous_effects_by_group(
             print(f"Failed for group {g}: {e}")
 
     return pd.DataFrame(results)
+
+
+def run_causal_forest(
+    data: pd.DataFrame,
+    treatment: str,
+    outcome: str,
+    confounders: List[str],
+    n_estimators: int = 500,
+    random_state: int = 42,
+) -> Dict:
+    """
+    Estimate heterogeneous treatment effects using a Causal Forest
+    (via econml.grf.CausalForest).
+
+    Returns a dictionary with the fitted model and summary statistics
+    of the estimated individual treatment effects.
+    """
+    try:
+        from econml.grf import CausalForest
+    except ImportError:
+        raise ImportError(
+            "econml is required for Causal Forest. Install with: pip install econml"
+        )
+
+    print("\nFitting Causal Forest for heterogeneous treatment effects ...")
+
+    Y = data[outcome].values
+    T = data[treatment].values
+    X = data[confounders].values
+
+    cf = CausalForest(
+        n_estimators=n_estimators,
+        min_samples_leaf=20,
+        max_depth=None,
+        random_state=random_state,
+        n_jobs=-1,
+    )
+    cf.fit(X=X, T=T, y=Y)
+
+    # Estimated individual treatment effects
+    ite = cf.predict(X).flatten()
+
+    summary = {
+        "mean_ite": float(np.mean(ite)),
+        "median_ite": float(np.median(ite)),
+        "std_ite": float(np.std(ite)),
+        "min_ite": float(np.min(ite)),
+        "max_ite": float(np.max(ite)),
+        "n_obs": len(ite),
+        "method": "CausalForest (econml.grf)",
+    }
+
+    print("=== Causal Forest Summary (Individual Treatment Effects) ===")
+    print(f"Mean ITE:    {summary['mean_ite']:.4f}")
+    print(f"Median ITE:  {summary['median_ite']:.4f}")
+    print(f"Std ITE:     {summary['std_ite']:.4f}")
+    print(f"Range:       [{summary['min_ite']:.4f}, {summary['max_ite']:.4f}]")
+
+    return {"model": cf, "ite": ite, "summary": summary}

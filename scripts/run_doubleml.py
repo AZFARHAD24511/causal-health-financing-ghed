@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 """
-Main script: Double Machine Learning analysis of public health financing
-effects on out-of-pocket expenditure using WHO GHED data.
+Main script: Causal analysis of public health financing effects on 
+out-of-pocket expenditure using WHO GHED data.
 
-Usage
------
-python scripts/run_doubleml.py
+Includes:
+- Double Machine Learning (ATE)
+- Stratified heterogeneity
+- Causal Forest (individual treatment effects)
 """
 
 import sys
 from pathlib import Path
 
-# Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -25,8 +25,10 @@ from src.causal_model import (
     run_doubleml_plr,
     run_multiple_learners,
     heterogeneous_effects_by_group,
+    run_causal_forest,
 )
 from src.utils import save_summary_table, plot_ate_comparison, plot_heterogeneity
+import pandas as pd
 
 
 def main():
@@ -35,7 +37,6 @@ def main():
     # ------------------------------------------------------------------
     data_file = PROJECT_ROOT / "data" / "GHED_data.XLSX"
 
-    # Only load the columns we need (much faster for the large file)
     usecols = [
         "location", "code", "region", "income", "year",
         "gghed_che", "oops_che", "ext_che", "che_gdp",
@@ -49,7 +50,7 @@ def main():
     print(sample[[TREATMENT, OUTCOME] + feature_cols].describe().round(2))
 
     # ------------------------------------------------------------------
-    # 2. Main DoubleML estimation (XGBoost)
+    # 2. Main DoubleML estimation
     # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("MAIN ANALYSIS: DoubleML with XGBoost")
@@ -77,7 +78,7 @@ def main():
         treatment=TREATMENT,
         outcome=OUTCOME,
         confounders=feature_cols,
-        learners=["xgboost", "lightgbm", "rf"],
+        learners=["xgboost", "rf"],
     )
 
     # ------------------------------------------------------------------
@@ -97,16 +98,33 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # 5. Save results
+    # 5. Causal Forest
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("CAUSAL FOREST: Individual Treatment Effects")
+    print("=" * 60)
+
+    try:
+        cf_results = run_causal_forest(
+            data=sample,
+            treatment=TREATMENT,
+            outcome=OUTCOME,
+            confounders=feature_cols,
+            n_estimators=300,
+        )
+        cf_summary = pd.DataFrame([cf_results["summary"]])
+    except Exception as e:
+        print(f"Causal Forest failed: {e}")
+        cf_summary = pd.DataFrame()
+
+    # ------------------------------------------------------------------
+    # 6. Save results
     # ------------------------------------------------------------------
     results_dir = PROJECT_ROOT / "results"
     results_dir.mkdir(exist_ok=True)
 
-    # Main result
     pd_main = pd.DataFrame([main_summary])
     save_summary_table(pd_main, results_dir / "main_ate.csv")
-
-    # Robustness
     save_summary_table(robustness, results_dir / "robustness_learners.csv")
     plot_ate_comparison(
         robustness,
@@ -114,7 +132,6 @@ def main():
         save_path=results_dir / "ate_by_learner.png",
     )
 
-    # Heterogeneity
     if not het_income.empty:
         save_summary_table(het_income, results_dir / "heterogeneity_income.csv")
         plot_heterogeneity(
@@ -123,11 +140,13 @@ def main():
             save_path=results_dir / "ate_by_income.png",
         )
 
+    if not cf_summary.empty:
+        save_summary_table(cf_summary, results_dir / "causal_forest_summary.csv")
+
     print("\n" + "=" * 60)
     print("Analysis finished. Results saved in /results")
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    import pandas as pd  # needed for the main block
     main()
