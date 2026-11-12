@@ -57,9 +57,9 @@ The protective effect of public financing is **stronger in lower-income countrie
 
 We implement the **partially linear regression** model within the DoubleML framework (Chernozhukov et al., 2018):
 
-\[
+$$
 Y = \theta D + g(X) + \varepsilon, \quad D = m(X) + \nu
-\]
+$$
 
 - **Treatment (D):** `gghed_che` — Domestic General Government Health Expenditure as % of Current Health Expenditure  
 - **Outcome (Y):** `oops_che` — Out-of-pocket expenditure as % of Current Health Expenditure  
