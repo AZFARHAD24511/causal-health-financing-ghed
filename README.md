@@ -1,162 +1,127 @@
 # Causal Effects of Public Health Financing on Out-of-Pocket Expenditure
 
-**Target Trial Emulation + Double Machine Learning & Causal Forest**  
-*Using the WHO Global Health Expenditure Database (GHED)*
-
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Double Machine Learning and Causal Forest analysis of WHO Global Health Expenditure Database (GHED) data, framed as a Target Trial Emulation.
 
 ---
 
-## Motivation
+## What this project does
 
-Financial protection is a core goal of health systems and a key determinant of equitable access to care and prevention.  
-This project asks a policy-relevant causal question:
+The central question is simple but policy-relevant:
 
-> **Does increasing the share of domestic general government health expenditure reduce the burden of out-of-pocket payments on households?**
+**Does a higher share of government financing in total health expenditure reduce the share that households pay out of pocket?**
 
-We address this question using modern causal inference methods (Double Machine Learning and Causal Forests) within an explicit **Target Trial Emulation** framework.
-
----
-
-## Target Trial Emulation Protocol
-
-We map the observational analysis to a hypothetical target trial:
-
-| Component              | Specification                                                                 |
-|------------------------|-------------------------------------------------------------------------------|
-| **Eligibility**        | Country-years with complete data on financing and expenditure (2000–2023)    |
-| **Treatment strategies**| Increase in GGHE-D as % of Current Health Expenditure (CHE)                  |
-| **Causal contrast**    | Average Treatment Effect (ATE) of higher public financing share              |
-| **Outcome**            | Out-of-pocket expenditure as % of CHE (`oops_che`)                           |
-| **Causal estimand**    | ATE under the partially linear model, with heterogeneous effects by income   |
-| **Analysis method**    | Double Machine Learning (double-robust) + Causal Forest for HTE              |
-
-This framing makes the assumptions transparent and aligns the analysis with current best practices in epidemiology and health services research.
+I examine this using country-year data from the WHO Global Health Expenditure Database (2000–2023). The analysis is set up as a Target Trial Emulation and estimated with Double Machine Learning (partially linear model) and, for heterogeneity, both stratified estimates and a Causal Forest.
 
 ---
 
-## Key Findings
+## Target Trial Emulation
 
-### Main Result (DoubleML + XGBoost)
+Rather than treating the observational data as a black box, the analysis is organised around an explicit target trial:
 
-| Metric                         | Value                |
-|--------------------------------|----------------------|
-| Average Treatment Effect (ATE) | **−0.689**           |
-| Standard Error                 | 0.050                |
-| 95% Confidence Interval        | [−0.787, −0.590]     |
-| p-value                        | < 0.001              |
+| Component | Choice made here |
+|-----------|------------------|
+| Eligibility | Country-years with non-missing values on the main financing and expenditure variables (2000–2023) |
+| Treatment | Domestic General Government Health Expenditure as % of Current Health Expenditure (`gghed_che`) |
+| Outcome | Out-of-pocket expenditure as % of Current Health Expenditure (`oops_che`) |
+| Causal contrast | Average treatment effect of a higher government financing share |
+| Effect modification | Explored by World Bank income group and via Causal Forest |
 
-**Interpretation:**  
-A 1 percentage point increase in the government share of health spending is associated with an average **0.69 percentage point reduction** in the out-of-pocket share. The effect is highly significant and robust.
-
-### Robustness Across Learners
-
-| Learner       | ATE    | 95% CI             |
-|---------------|--------|--------------------|
-| XGBoost       | −0.674 | [−0.776, −0.572]   |
-| Random Forest | −0.557 | [−0.636, −0.478]   |
-
-![ATE by Learner](results/ate_by_learner.png)
-
-### Heterogeneous Treatment Effects by Income Group
-
-The protective effect of public financing is **substantially stronger in lower-income countries**:
-
-| Income Group  | ATE    | 95% CI             | N     |
-|---------------|--------|--------------------|-------|
-| Low           | −0.866 | [−1.062, −0.669]   | 565   |
-| Lower-middle  | −0.848 | [−0.979, −0.717]   | 1,207 |
-| Upper-middle  | −0.748 | [−0.931, −0.565]   | 1,159 |
-| High          | −0.525 | [−0.615, −0.435]   | 1,093 |
-
-![ATE by Income Group](results/ate_by_income.png)
+This keeps the identifying assumptions visible and makes the link to the epidemiological literature on target trials clear.
 
 ---
 
-## Methods
+## Main results
 
-### 1. Double Machine Learning (Partial Linear Model)
+**DoubleML (XGBoost nuisance models, 5-fold cross-fitting)**
 
-We estimate the ATE using the partially linear regression model within the DoubleML framework (Chernozhukov et al., 2018):
+| Quantity | Estimate |
+|----------|----------|
+| ATE | −0.689 |
+| Std. error | 0.050 |
+| 95% CI | [−0.787, −0.590] |
+| p-value | < 0.001 |
+
+A one-percentage-point increase in the government share of health spending is associated with a reduction of roughly 0.69 percentage points in the out-of-pocket share. The estimate is stable when the nuisance functions are estimated with random forests instead of XGBoost (ATE ≈ −0.56).
+
+**Heterogeneity by income group**
+
+| Income group | ATE | 95% CI | N |
+|--------------|-----|--------|---|
+| Low | −0.866 | [−1.062, −0.669] | 565 |
+| Lower-middle | −0.848 | [−0.979, −0.717] | 1,207 |
+| Upper-middle | −0.748 | [−0.931, −0.565] | 1,159 |
+| High | −0.525 | [−0.615, −0.435] | 1,093 |
+
+The protective association is visibly stronger in lower-income settings. This pattern is consistent with the idea that public financing matters more where private payments are a larger residual burden.
+
+![ATE by learner](results/ate_by_learner.png)
+
+![ATE by income group](results/ate_by_income.png)
+
+---
+
+## Estimation approach
+
+The core model is the partially linear specification used in DoubleML:
 
 $$
-Y = \theta D + g(X) + \varepsilon, \quad D = m(X) + \nu
+Y = \theta D + g(X) + \varepsilon, \qquad D = m(X) + \nu
 $$
 
-- **Treatment (D):** `gghed_che`
-- **Outcome (Y):** `oops_che`
-- **Confounders (X):** External financing share, CHE as % of GDP, log(CHE per capita), GGHE-D as % of GDP
-- Nuisance functions estimated with XGBoost / Random Forest + 5-fold cross-fitting
+- \(D\): `gghed_che`
+- \(Y\): `oops_che`
+- \(X\): external financing share, CHE as % of GDP, log CHE per capita, and GGHE-D as % of GDP
 
-This estimator is **double-robust**.
+Nuisance functions \(g\) and \(m\) are estimated with gradient boosting or random forests, and cross-fitting is used to avoid overfitting bias. The resulting estimator for \(\theta\) is double-robust.
 
-### 2. Causal Forest for Heterogeneous Effects
-
-In addition to stratified estimates, we implement approaches related to Causal Forests to examine conditional average treatment effects (CATE) more flexibly. The current version reports stratified HTEs by income group; extension to full Causal Forest (e.g. via `econml`) is straightforward within the existing code structure.
+For effect heterogeneity I report both simple stratified ATEs (by income group) and summaries from a Causal Forest (`econml.grf`). The stratified results are the most transparent; the forest provides a check that the pattern is not an artefact of the particular grouping.
 
 ---
 
 ## Data
 
-- **Source:** WHO Global Health Expenditure Database (GHED), December 2025 update  
-- **Sample:** 183 countries, 2000–2023 → **4,024 country-year observations** after cleaning  
-- Raw data are not stored in the repository (see `data/README.md`)
+- WHO Global Health Expenditure Database, December 2025 release
+- 183 countries, years 2000–2023
+- Final analysis sample: 4,024 country-year observations after dropping incomplete records
+
+The raw Excel file is kept outside the repository (see `data/README.md`).
 
 ---
 
-## Repository Structure
-
-```
-causal-health-financing-ghed/
-├── data/                   # Place GHED_data.XLSX here
-├── src/
-│   ├── data_prep.py        # Data loading & cleaning
-│   ├── causal_model.py     # DoubleML + helpers
-│   └── utils.py            # Plotting & reporting
-├── scripts/
-│   └── run_doubleml.py     # Main analysis pipeline
-├── results/                # Tables and figures
-└── README.md
-```
-
----
-
-## Quick Start
+## How to run
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Place GHED_data.XLSX in data/, then:
+# place GHED_data.XLSX in data/
 python scripts/run_doubleml.py
 ```
 
 ---
 
-## Relevance for Methodological Research in Epidemiology
+## Why this is relevant for methodological work in epidemiology
 
-This project demonstrates:
+The project is deliberately modest in scope but careful on method:
 
-- Explicit use of the **Target Trial Emulation** framework
-- Application of **double-robust machine learning** methods (DoubleML)
-- Estimation of **heterogeneous treatment effects** relevant to equity and prevention
-- Clean, reproducible, modular code suitable for extension into research software
+- The analysis is written as a Target Trial Emulation rather than a purely algorithmic exercise.
+- Double Machine Learning is used in its standard partially linear form, with explicit cross-fitting and robustness checks across learners.
+- Heterogeneity is examined both by pre-specified strata and with a forest-based approach.
+- Code is modular and can be extended (additional confounders, alternative scores, or a proper software package structure).
 
-These elements align directly with current priorities in causal inference for large-scale health and epidemiological data.
+These are the kinds of choices that matter when causal methods are applied to secondary health-system data.
 
 ---
 
 ## References
 
-- Chernozhukov, V. et al. (2018). Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*.
-- Hernán & Robins. *Causal Inference: What If* (Target Trial framework)
+- Chernozhukov et al. (2018). Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*.
+- Hernán & Robins. *Causal Inference: What If*.
 - WHO Global Health Expenditure Database: https://apps.who.int/nha/database
-- System of Health Accounts 2011 (SHA 2011)
 
 ---
 
 ## License
 
-MIT License
+MIT
