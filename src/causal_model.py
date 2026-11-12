@@ -13,7 +13,7 @@ from sklearn.model_selection import KFold
 
 try:
     from doubleml import DoubleMLData, DoubleMLPLR
-    from doubleml.utils import DMLBackend
+    from doubleml import DoubleMLData, DoubleMLPLR
 except ImportError:
     raise ImportError(
         "doubleml package is required. Install with: pip install doubleml"
