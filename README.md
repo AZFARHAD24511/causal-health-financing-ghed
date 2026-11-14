@@ -60,6 +60,19 @@ The protective association is visibly stronger in lower-income settings. This pa
 
 ---
 
+## Sensitivity to residual confounding
+
+Unmeasured confounding remains a concern in cross-country observational analyses. To assess how strong such confounding would need to be to explain away the main result, I computed approximate E-values (VanderWeele & Ding, 2017).
+
+| Quantity | Value |
+|----------|-------|
+| E-value (point estimate) | ≈ 3.15 |
+| E-value (CI limit closest to null) | ≈ 2.82 |
+
+An unmeasured confounder would need to be associated with both the treatment and the outcome by a risk ratio of roughly 3.15 each to fully explain away the observed effect. This suggests moderate robustness to residual confounding, while still leaving room for caution.
+
+---
+
 ## Estimation approach
 
 The core model is the partially linear specification used in DoubleML:
@@ -108,7 +121,8 @@ The project is deliberately modest in scope but careful on method:
 - The analysis is written as a Target Trial Emulation rather than a purely algorithmic exercise.
 - Double Machine Learning is used in its standard partially linear form, with explicit cross-fitting and robustness checks across learners.
 - Heterogeneity is examined both by pre-specified strata and with a forest-based approach.
-- Code is modular and can be extended (additional confounders, alternative scores, or a proper software package structure).
+- Sensitivity to residual confounding is assessed with E-values.
+- Code is modular and can be extended.
 
 These are the kinds of choices that matter when causal methods are applied to secondary health-system data.
 
@@ -116,8 +130,9 @@ These are the kinds of choices that matter when causal methods are applied to se
 
 ## References
 
-- Chernozhukov et al. (2018). Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*.
-- Hernán & Robins. *Causal Inference: What If*.
+- Chernozhukov, V. et al. (2018). Double/debiased machine learning for treatment and structural parameters. *The Econometrics Journal*.
+- Hernán, M. A., & Robins, J. M. *Causal Inference: What If*.
+- VanderWeele, T. J., & Ding, P. (2017). Sensitivity Analysis in Observational Research: Introducing the E-Value. *Annals of Internal Medicine*, 167(4), 268–274.
 - WHO Global Health Expenditure Database: https://apps.who.int/nha/database
 
 ---
